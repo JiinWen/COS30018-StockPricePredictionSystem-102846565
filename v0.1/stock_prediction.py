@@ -20,13 +20,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import pandas_datareader as web
-import datetime as dt
+import datetime as datetime
 import tensorflow as tf
 import yfinance as yf
+import os
+import mplfinance as fplt
 
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, LSTM, InputLayer
+from sklearn.model_selection import train_test_split
 
 #------------------------------------------------------------------------------
 # Load Data
@@ -37,13 +40,69 @@ from tensorflow.keras.layers import Dense, Dropout, LSTM, InputLayer
 #------------------------------------------------------------------------------
 DATA_SOURCE = "yahoo"
 COMPANY = "TSLA"
+DATA_FILE = "TSLA_data.csv"
 
 # start = '2012-01-01', end='2017-01-01'
 TRAIN_START = '2015-01-01'
 TRAIN_END = '2020-01-01'
 
+#Train start and end date validation -- Train start date must be earlier than train end date
+def start_end_date (TRAIN_START_STR ='2025-01-01', TRAIN_END_STR = '2020-01-01', date_format = "%Y-%m-%d"):
+    train_start = datetime.strptime(TRAIN_START_STR, date_format)
+    train_end = datetime.strptime(TRAIN_END_STR, date_format)
+    print(train_start,train_end)
+    if train_start < train_end:
+        print("Error: Train start date must be earlier than train end date!")
+    return train_start, train_end
+
+# print(start_end_date(TRAIN_START,TRAIN_END))
+
 data =  yf.download(COMPANY, start=TRAIN_START, end=TRAIN_END, progress=False)
 # yf.download(COMPANY, start = TRAIN_START, end=TRAIN_END)
+
+#Deal with NaN issue with forward fill method
+def handle_missing_values(df):
+    if df.isnull().sum().sum() > 0:
+        df.fillna(method='ffill', inplace=True)
+    return df
+
+data = handle_missing_values(data)
+
+#https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html#sklearn.model_selection.train_test_split
+def custom_train_test_split(data, split_ratio=0.8, method='random'):
+    """
+    Custom function to split data into train and test set.
+
+    Parameters:
+    - data: DataFrame containing the data to split.
+    - split_ratio: Ratio of training data. Default is 0.8 (i.e., 80% training data).
+    - method: Method to split data. Can be 'random' or 'date'.
+    - split_date: Date to split the data if method is 'date'. Must be provided if method is 'date'.
+
+    Returns:
+    - train_data: DataFrame containing the training data.
+    - test_data: DataFrame containing the test data.
+    """
+    train_data, test_data = train_test_split(data, train_size=split_ratio, random_state=42)
+    
+    return train_data, test_data
+
+train, test = custom_train_test_split(data, split_ratio=0.8, method='random')
+
+print(custom_train_test_split(data, split_ratio=0.8, method="random"))
+
+def data_to_file(DATA_FILE):
+    if os.path.exists(DATA_FILE): 
+        print(f"Loading data from {DATA_FILE}")
+        data = pd.read_csv(DATA_FILE)
+    else:
+        print(f"Fetching data from {DATA_SOURCE} for {COMPANY}")
+        data = yf.download(COMPANY, start=TRAIN_START, end=TRAIN_END, progress=False)
+        print(f"Saving data to {DATA_FILE}")
+        data.to_csv(DATA_FILE)
+    return 
+
+print(data_to_file(DATA_FILE))
 
 # For more details: 
 # https://pandas.pydata.org/pandas-docs/stable/user_guide/dsintro.html
@@ -59,6 +118,16 @@ data =  yf.download(COMPANY, start=TRAIN_START, end=TRAIN_END, progress=False)
 PRICE_VALUE = "Close"
 
 scaler = MinMaxScaler(feature_range=(0, 1)) 
+
+# def custom_MinMaxScaler(data):
+#     scaler = MinMaxScaler()
+#     scaler.fit(data)
+#     store = scaler.transform(data)
+#     # data structure 
+#     return 
+
+# print(custom_MinMaxScaler(data))
+
 # Note that, by default, feature_range=(0, 1). Thus, if you want a different 
 # feature_range (min,max) then you'll need to specify it here
 scaled_data = scaler.fit_transform(data[PRICE_VALUE].values.reshape(-1, 1)) 
