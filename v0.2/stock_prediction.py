@@ -314,13 +314,20 @@ def plot_candlestick(data, n=30):
 plot_candlestick(test_data, n=30)
 
 
-def plot_boxplot(data, column_name):
-    plt.boxplot(data[column_name])
-    plt.ylabel('Value')  
-    plt.xticks([1], [column_name])  
+def plot_boxplot(data, column_name, n=5):
+    
+    # Create a moving window of 'n' consecutive trading days
+    rolling_data = data[column_name].rolling(window=n).mean()
+    
+    # Plot the boxplot for the rolling window data
+    plt.boxplot(rolling_data.dropna())
+    
+    plt.ylabel('Value')
+    plt.xticks([1], [f'Rolling {n}-Day {column_name}'])
+    plt.title(f'Boxplot of {n}-Day {column_name}')
     plt.show()
 
-plot_boxplot(test_data, PRICE_VALUE)
+plot_boxplot(test_data, PRICE_VALUE, n=10) 
     
 plt.plot(actual_prices, color="black", label=f"Actual {COMPANY} Price")
 plt.plot(predicted_prices, color="green", label=f"Predicted {COMPANY} Price")
