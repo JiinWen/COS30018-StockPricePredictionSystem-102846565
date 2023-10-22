@@ -7,15 +7,6 @@
 # Youtuble link: https://www.youtube.com/watch?v=PuZY9q-aKLw
 # By: NeuralNine
 
-# Need to install the following:
-# pip install numpy
-# pip install matplotlib
-# pip install pandas
-# pip install tensorflow
-# pip install scikit-learn
-# pip install pandas-datareader
-# pip install yfinance
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -31,20 +22,13 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, LSTM, InputLayer
 from sklearn.model_selection import train_test_split
 
-#------------------------------------------------------------------------------
-# Load Data
-## TO DO:
-# 1) Check if data has been saved before. 
-# If so, load the saved data
-# If not, save the data into a directory
-#------------------------------------------------------------------------------
 DATA_SOURCE = "yahoo"
 COMPANY = "TSLA"
 DATA_FILE = "TSLA_data.csv"
-
-# start = '2012-01-01', end='2017-01-01'
 TRAIN_START = '2015-01-01'
 TRAIN_END = '2020-01-01'
+PRICE_VALUE = "Close"
+PREDICTION_DAYS = 60
 
 #Train start and end date validation -- Train start date must be earlier than train end date
 def start_end_date (TRAIN_START_STR ='2025-01-01', TRAIN_END_STR = '2020-01-01', date_format = "%Y-%m-%d"):
@@ -70,19 +54,7 @@ data = handle_missing_values(data)
 
 #https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html#sklearn.model_selection.train_test_split
 def custom_train_test_split(data, split_ratio=0.8, method='random'):
-    """
-    Custom function to split data into train and test set.
-
-    Parameters:
-    - data: DataFrame containing the data to split.
-    - split_ratio: Ratio of training data. Default is 0.8 (i.e., 80% training data).
-    - method: Method to split data. Can be 'random' or 'date'.
-    - split_date: Date to split the data if method is 'date'. Must be provided if method is 'date'.
-
-    Returns:
-    - train_data: DataFrame containing the training data.
-    - test_data: DataFrame containing the test data.
-    """
+    
     train_data, test_data = train_test_split(data, train_size=split_ratio, random_state=42)
     
     return train_data, test_data
@@ -115,7 +87,7 @@ print(data_to_file(DATA_FILE))
 # 2) Use a different price value eg. mid-point of Open & Close
 # 3) Change the Prediction days
 #------------------------------------------------------------------------------
-PRICE_VALUE = "Close"
+
 
 scaler = MinMaxScaler(feature_range=(0, 1)) 
 
@@ -147,7 +119,7 @@ scaled_data = scaler.fit_transform(data[PRICE_VALUE].values.reshape(-1, 1))
 # given to reshape so as to maintain the same number of elements.
 
 # Number of days to look back to base the prediction
-PREDICTION_DAYS = 60 # Original
+ # Original
 
 # To store the training data
 x_train = []

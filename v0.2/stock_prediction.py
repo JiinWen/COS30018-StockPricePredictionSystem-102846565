@@ -7,15 +7,6 @@
 # Youtuble link: https://www.youtube.com/watch?v=PuZY9q-aKLw
 # By: NeuralNine
 
-# Need to install the following:
-# pip install numpy
-# pip install matplotlib
-# pip install pandas
-# pip install tensorflow
-# pip install scikit-learn
-# pip install pandas-datareader
-# pip install yfinance
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -41,10 +32,10 @@ from sklearn.model_selection import train_test_split
 DATA_SOURCE = "yahoo"
 COMPANY = "TSLA"
 DATA_FILE = "TSLA_data.csv"
-
-# start = '2012-01-01', end='2017-01-01'
 TRAIN_START = '2015-01-01'
 TRAIN_END = '2020-01-01'
+PRICE_VALUE = "Close"
+PREDICTION_DAYS = 60
 
 #Train start and end date validation -- Train start date must be earlier than train end date
 def start_end_date (TRAIN_START_STR ='2025-01-01', TRAIN_END_STR = '2020-01-01', date_format = "%Y-%m-%d"):
@@ -103,7 +94,7 @@ print(data_to_file(DATA_FILE))
 # 2) Use a different price value eg. mid-point of Open & Close
 # 3) Change the Prediction days
 #------------------------------------------------------------------------------
-PRICE_VALUE = "Close"
+
 
 scaler = MinMaxScaler(feature_range=(0, 1)) 
 
@@ -135,7 +126,7 @@ scaled_data = scaler.fit_transform(data[PRICE_VALUE].values.reshape(-1, 1))
 # given to reshape so as to maintain the same number of elements.
 
 # Number of days to look back to base the prediction
-PREDICTION_DAYS = 60 # Original
+ # Original
 
 # To store the training data
 x_train = []
@@ -240,8 +231,7 @@ model.fit(x_train, y_train, epochs=25, batch_size=32)
 # Test the model accuracy on existing data
 #------------------------------------------------------------------------------
 # Load the test data
-TEST_START = '2020-01-02'
-TEST_END = '2022-12-31'
+
 
 test_data = yf.download(COMPANY, start=TRAIN_START, end=TRAIN_END, progress=False)
 
@@ -300,7 +290,6 @@ predicted_prices = scaler.inverse_transform(predicted_prices)
 
 def plot_candlestick(data, n=30):
     
-    # Resample data for n days
     data_resampled = data.resample(f'{n}D').agg({
         'Open': 'first',
         'High': 'max',
@@ -308,26 +297,30 @@ def plot_candlestick(data, n=30):
         'Close': 'last'
     })
     
-    # Plot using mplfinance
     fplt.plot(data_resampled, type='candle', style='charles', title=f'{COMPANY} Candlestick Chart ({n} days per candle)')
 
 plot_candlestick(test_data, n=30)
 
 
-def plot_boxplot(data, column_name, n=5):
+def plot_boxplot(data, column_name, n=30):
+    chunks = [data[i:i+n] for i in range(0, len(data), n)]
     
-    # Create a moving window of 'n' consecutive trading days
-    rolling_data = data[column_name].rolling(window=n).mean()
+    box_data = [chunk[column_name].values for chunk in chunks]
     
-    # Plot the boxplot for the rolling window data
-    plt.boxplot(rolling_data.dropna())
+    dates = [chunk.index[0].strftime('%Y-%m-%d') for chunk in chunks]
     
-    plt.ylabel('Value')
-    plt.xticks([1], [f'Rolling {n}-Day {column_name}'])
-    plt.title(f'Boxplot of {n}-Day {column_name}')
+    plt.figure(figsize=(15, 7))
+    plt.boxplot(box_data)
+    
+    plt.xticks(ticks=np.arange(1, len(dates)+1), labels=dates, rotation=90)
+    
+    plt.title(f'Boxplot of {column_name} (every {n} days)')
+    plt.xlabel('Date')
+    plt.ylabel(column_name)
+    plt.tight_layout() 
     plt.show()
 
-plot_boxplot(test_data, PRICE_VALUE, n=10) 
+plot_boxplot(test_data, PRICE_VALUE)
     
 plt.plot(actual_prices, color="black", label=f"Actual {COMPANY} Price")
 plt.plot(predicted_prices, color="green", label=f"Predicted {COMPANY} Price")
