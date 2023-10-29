@@ -17,6 +17,8 @@ import yfinance as yf
 import os
 import mplfinance as fplt
 
+
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, LSTM, InputLayer, GRU, SimpleRNN, Bidirectional
@@ -128,85 +130,56 @@ def arima_forecast(train_data, order=(5,1,0), steps=5):
     forecast = model_fit.forecast(steps=steps)
     return forecast
 
-data =  yf.download(COMPANY, start=TRAIN_START, end=TRAIN_END, progress=False)
+if __name__ == "__main__":
+    # 1. prepare the training data
+    data =  yf.download(COMPANY, start=TRAIN_START, end=TRAIN_END, progress=False)
+    data = handle_missing_values(data)
+    scaler = MinMaxScaler(feature_range=(0, 1)) 
 
-data = handle_missing_values(data)
+    full_data = yf.download(COMPANY, start=TRAIN_START, end=TEST_END, progress=False)
+    full_data = handle_missing_values(full_data)
+    scaled_full_data = scaler.fit_transform(full_data[features].values)
 
-scaler = MinMaxScaler(feature_range=(0, 1)) 
+    train_data_length = int(len(scaled_full_data) * 0.8)
+    train_data = scaled_full_data[:train_data_length]
+    test_data = scaled_full_data[train_data_length - PREDICTION_DAYS:]
 
-full_data = yf.download(COMPANY, start=TRAIN_START, end=TEST_END, progress=False)
-full_data = handle_missing_values(full_data)
-scaled_full_data = scaler.fit_transform(full_data[features].values)
+    scaled_data = scaler.fit_transform(data[features].values.reshape(-1, 1)) 
 
-train_data_length = int(len(scaled_full_data) * 0.8)
-train_data = scaled_full_data[:train_data_length]
-test_data = scaled_full_data[train_data_length - PREDICTION_DAYS:]
+    # LSTM
+    steps_in = PREDICTION_DAYS
+    steps_out = 5
+    # 1 prepare LSTM training data
+    X_train_multivariate_multistep, y_train_multivariate_multistep = prepare_multivariate_multistep_data(train_data, features, steps_in, steps_out)
+    X_test_multivariate_multistep, y_test_multivariate_multistep = prepare_multivariate_multistep_data(test_data, features, steps_in, steps_out)
+    # 2 run LSTM predictions
+    lstm_model = custom_model(sequence_length, n_features, layer_type=LSTM, n_layers=2, 
+                                    layer_units=100, dropout=0.2, optimizer="adam")
+    lstm_model.fit(X_train_multivariate_multistep, y_train_multivariate_multistep, epochs=3, batch_size=32)
+    lstm_model.compile(optimizer="adam", loss="mean_absolute_error", metrics=["mean_absolute_error"], run_eagerly=True)
+    predicted_closing_prices = lstm_model.predict(X_test_multivariate_multistep)
 
-scaled_data = scaler.fit_transform(data[features].values.reshape(-1, 1)) 
+    # ARIMA
+    # 1 prepare the arima training data (1 feature time series)
+    # Extract the univariate series
+    univariate_series = train_data[:, 3]  # index 3 because we want to only use the close price feature
+    # Run ARIMA predictions
+    arima_predictions = arima_forecast(univariate_series, order=(5,1,0), steps=len(univariate_series))
 
-steps_in = PREDICTION_DAYS
-steps_out = 5
+    # LSTM + ARIMA ENSEMBLE
+    # 1 get the average of 
+    ensemble_predictions = (univariate_series + arima_predictions) / 2
 
-X_train_multivariate_multistep, y_train_multivariate_multistep = prepare_multivariate_multistep_data(train_data, features, steps_in, steps_out)
-X_test_multivariate_multistep, y_test_multivariate_multistep = prepare_multivariate_multistep_data(test_data, features, steps_in, steps_out)
+    # Rendering
+    plt.plot(y_test_multivariate_multistep[:,0], color="black", label=f"Actual {COMPANY} Price")  
+    plt.plot(predicted_closing_prices[:, 0], color="green", label=f"Predicted LSTM {COMPANY} Price") 
+    plt.plot(arima_predictions, color="blue", label=f"Predicted ARIMA {COMPANY} Price")
+    plt.plot(ensemble_predictions, color="red", label=f"Ensemble Predicted {COMPANY} Price")
+    plt.title(f"{COMPANY} Multivariate Multistep Share Price")
+    plt.xlabel("Time")
+    plt.ylabel(f"{COMPANY} Share Price")
+    plt.legend()
+    plt.show()
 
-lstm_model = custom_model(sequence_length, n_features, layer_type=LSTM, n_layers=2, 
-                                 layer_units=100, dropout=0.2, optimizer="adam")
-
-
-lstm_model.fit(X_train_multivariate_multistep, y_train_multivariate_multistep, epochs=3, batch_size=32)
-lstm_model.compile(optimizer="adam", loss="mean_absolute_error", metrics=["mean_absolute_error"], run_eagerly=True)
-
-predicted_closing_prices = lstm_model.predict(X_test_multivariate_multistep)
-# reshape = predicted_closing_prices[:, :,3].reshape(-1, 1)
-# predicted_closing_prices = X_test_multivariate_multistep.inverse_transform(X_test_multivariate_multistep).ravel()
-
-
-# train_closing_prices = train_data[:, 3] 
-
-# arima_predictions = arima_forecast(train_closing_prices, order=(5,1,0), steps=len(predicted_closing_prices[:, 0]))
-from sklearn.decomposition import PCA
-# Reshape the data to 2D
-data_2d = X_train_multivariate_multistep.reshape(X_train_multivariate_multistep.shape[0], -1)
-
-# Apply PCA and keep only the first principal component
-pca = PCA(n_components=1)
-compressed_data = pca.fit_transform(data_2d)
-
-# Extract the univariate series
-univariate_series = compressed_data.flatten()
-
-arima_predictions = arima_forecast(univariate_series, order=(5,1,0), steps=len(univariate_series))
-
-# arima_model = train_arima(X_test_multivariate_multistep, X_train_multivariate_multistep)
-# for i in range(1):
-#     predicted_closing_prices = lstm_model.predict(X_test_multivariate_multistep)
-#     arima_predictions = arima_model.predict(X_test_multivariate_multistep)
-    
-#     predicted = scaler.inverse_transform(predicted_closing_price)
-#     predicted = predicted + arima_predictions/2
-# arima_predictions = X_train_multivariate_multistep.inverse_transform(np.array(arima_prediction).reshape(-1,1)).ravel()
-# ensemble_predictions = (predicted_closing_prices[:,0]+ arima_predictions) / 2
-ensemble_predictions = (univariate_series + arima_predictions) / 2
-
-# plt.plot(y_test_multivariate_multistep[:, 0], color="black", label=f"Actual {COMPANY} Price")  
-# plt.plot(predicted_closing_prices[:, 0], color="green", label=f"Predicted {COMPANY} Price") 
-# plt.title(f"{COMPANY} Multivariate Multistep Share Price")
-# plt.xlabel("Time")
-# plt.ylabel(f"{COMPANY} Share Price")
-# plt.legend()
-# plt.show()
-
-plt.plot(y_test_multivariate_multistep[:,0], color="black", label=f"Actual {COMPANY} Price")  
-plt.plot(predicted_closing_prices[:, 0], color="green", label=f"Predicted LSTM {COMPANY} Price") 
-plt.plot(arima_predictions, color="blue", label=f"Predicted ARIMA {COMPANY} Price")
-plt.plot(ensemble_predictions, color="red", label=f"Ensemble Predicted {COMPANY} Price")
-plt.title(f"{COMPANY} Multivariate Multistep Share Price")
-plt.xlabel("Time")
-plt.ylabel(f"{COMPANY} Share Price")
-plt.legend()
-plt.show()
-
-
-for i in range(steps_out):
-    print(f"Predicted price for Day {i+1}: {predicted_closing_prices[0][i]}")
+    for i in range(steps_out):
+        print(f"Predicted price for Day {i+1}: {predicted_closing_prices[0][i]}")
